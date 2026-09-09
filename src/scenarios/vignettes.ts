@@ -108,9 +108,9 @@ export const vignettes: Vignette[] = [
     },
   },
 
-  // 7. Undercoding: COPD with acute exacerbation plus a comorbidity.
+  // 7. Primary + comorbidity correctness: COPD acute exacerbation plus hypertension.
   {
-    id: "undercoding-copd",
+    id: "copd-with-comorbidity",
     title: "COPD exacerbation with hypertension",
     patient: { name: "Henry O'Brien", mrn: "49125", dob: "1951-09-14" },
     narrative:
@@ -135,7 +135,11 @@ export const vignettes: Vignette[] = [
       "recorded. No vitals, ECG, or laboratory results are available in the note, " +
       "and the documentation is insufficient to characterize the problem.",
     expected: {
-      primary: "R51.9",
+      // Under-specified chest discomfort. The correct action is to DECLINE and
+      // flag uncertainty, not to assign a confident code — so `miscode` is not
+      // applied here (see evaluate.ts). R07.9 is only the closest label if a
+      // provisional code were forced.
+      primary: "R07.9",
       comorbidities: [],
       ambiguous: true,
     },

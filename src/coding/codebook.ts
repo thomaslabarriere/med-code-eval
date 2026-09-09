@@ -29,6 +29,8 @@ const ENTRIES: ReadonlyArray<{ code: ICDCode; label: string; severityWeight: num
   // Infection / sepsis
   { code: "N39.0", label: "Urinary tract infection, site not specified", severityWeight: 1 },
   { code: "A41.9", label: "Sepsis, unspecified organism", severityWeight: 3 },
+  // Symptom code (used for the under-specified / chest-discomfort case)
+  { code: "R07.9", label: "Chest pain, unspecified", severityWeight: 1 },
   // Common others
   { code: "E66.9", label: "Obesity, unspecified", severityWeight: 1 },
   { code: "K21.9", label: "Gastro-esophageal reflux disease without esophagitis", severityWeight: 1 },

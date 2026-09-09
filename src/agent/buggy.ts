@@ -2,9 +2,10 @@ import type { CodingAgent, CodingRun, ICDCode } from "../types.js";
 import { codebook } from "../coding/codebook.js";
 
 /**
- * Deterministic, network-free agents. Each triggers exactly ONE failure mode so
- * the evaluator's metrics can be exercised (mutation-proof tests). Heuristics
- * are intentionally trivial; all array indexing is guarded.
+ * Deterministic, network-free agents. Each is designed to trigger AT LEAST its
+ * one intended failure mode (it may incidentally trip others, e.g. an upcoder
+ * also miscodes) so the evaluator's metrics can be exercised by the
+ * mutation-proof tests. Heuristics are intentionally trivial; indexing guarded.
  */
 
 /** First codebook code at the given severity weight, or undefined. */

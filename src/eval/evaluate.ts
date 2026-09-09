@@ -41,7 +41,9 @@ export function evaluateVignette(
     if (failed) failures.push(metric);
   };
 
-  check("miscode", true, failsMiscode(expected, diff));
+  // miscode is NOT applied on an under-specified case: there the correct action
+  // is to decline and flag (see acted_on_ambiguous), not to code a principal.
+  check("miscode", expected.ambiguous !== true, failsMiscode(expected, diff));
   check(
     "missed_comorbidity",
     expected.comorbidities.length > 0,

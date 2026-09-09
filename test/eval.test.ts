@@ -20,11 +20,17 @@ function vignette(id: string): Vignette {
 // principal + comorbidities, with a clean rationale that echoes no identifiers.
 // For an under-specified case, the correct agent flags uncertainty.
 function correctRun(v: Vignette): CodingRun {
+  // On an under-specified case the correct action is to DECLINE (assign no
+  // code) and flag the gap — so the "correct" run assigns nothing there.
+  if (v.expected.ambiguous) {
+    return {
+      codes: [],
+      rationale: "Documentation is insufficient to code; recommend clarification.",
+    };
+  }
   return {
     codes: [v.expected.primary, ...v.expected.comorbidities],
-    rationale: v.expected.ambiguous
-      ? "Case is under-specified; coding provisionally and flagging this as uncertain — clarification recommended."
-      : "Coded from the documented diagnoses.",
+    rationale: "Coded from the documented diagnoses.",
   };
 }
 

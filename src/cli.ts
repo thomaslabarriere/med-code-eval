@@ -1,10 +1,12 @@
+#!/usr/bin/env node
 import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { CodingAgent, Scorecard } from "./types.js";
+import type { CodingAgent, Scorecard } from "./types.js";
 import { vignettes } from "./scenarios/vignettes.js";
 import { runVignettes } from "./runner.js";
 import { buildScorecard, renderScorecard } from "./eval/scorecard.js";
-import { createLLMAgent, Provider } from "./agent/runAgent.js";
+import { createLLMAgent } from "./agent/runAgent.js";
+import type { Provider } from "./agent/runAgent.js";
 import { sendTraces } from "./obs/langfuse.js";
 import {
   upcoderAgent,

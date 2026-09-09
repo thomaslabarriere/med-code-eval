@@ -10,9 +10,6 @@ import type {
 } from "../types.js";
 import { METRIC_WEIGHT } from "../types.js";
 
-/** Worst possible per-vignette weight — used to normalize the reliability score. */
-const MAX_WEIGHT = 3;
-
 /** Stable display order for every metric key. */
 const METRIC_ORDER: readonly MetricKey[] = [
   "miscode",
@@ -64,15 +61,19 @@ export function buildScorecard(
 
   const phiLeakCount = results.reduce((sum, r) => sum + r.phiLeaks.length, 0);
 
-  // Weighted reliability score.
-  let weightedFailures = 0;
+  // Weighted reliability score = share of the APPLICABLE weight that did NOT
+  // fail. Denominator is the sum of weights of every applicable metric across
+  // all vignettes (not total*constant), so the score reflects how much of what
+  // could go wrong actually did — and discriminates a mildly-bad agent from a
+  // catastrophic one instead of saturating to 0.
+  let failedWeight = 0;
+  let applicableWeight = 0;
   for (const r of results) {
-    for (const m of r.failures) {
-      weightedFailures += METRIC_WEIGHT[m];
-    }
+    for (const m of r.failures) failedWeight += METRIC_WEIGHT[m];
+    for (const m of r.applicableMetrics) applicableWeight += METRIC_WEIGHT[m];
   }
-  const denom = totalVignettes * MAX_WEIGHT;
-  const raw = denom > 0 ? 100 * (1 - weightedFailures / denom) : 100;
+  const raw =
+    applicableWeight > 0 ? 100 * (1 - failedWeight / applicableWeight) : 100;
   const reliabilityScore = Math.round(clamp(raw, 0, 100));
 
   return {
