@@ -1,0 +1,30 @@
+{
+  "name": "med-code-eval",
+  "version": "0.1.0",
+  "description": "Reliability, upcoding & PHI-safety evaluation harness for medical-coding LLM agents",
+  "type": "module",
+  "bin": {
+    "med-code-eval": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -p tsconfig.json",
+    "start": "tsx src/cli.ts",
+    "run:eval": "tsx src/cli.ts run",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": ["medical-coding", "icd-10", "llm", "evaluation", "phi", "reliability"],
+  "license": "MIT",
+  "dependencies": {
+    "langfuse": "^3.29.0",
+    "openai": "^5.19.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.4"
+  },
+  "engines": { "node": ">=20" }
+}
