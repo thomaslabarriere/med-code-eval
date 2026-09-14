@@ -7,6 +7,7 @@ import {
   parseCandidates,
 } from "../src/agent/coder.js";
 import {
+  containsTerm,
   normalizeForMatch,
   retainSupported,
   verifyGrounding,
@@ -57,6 +58,67 @@ describe("grounding — objective span verification", () => {
 
   it("normalizeForMatch collapses whitespace and lowercases", () => {
     expect(normalizeForMatch("  Foo\t Bar\n")).toBe("foo bar");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 2 — word-boundary span matching (a generic short span can no longer match
+// by accident inside a larger word). This is the existence layer of grounding.
+// ---------------------------------------------------------------------------
+describe("grounding — word-boundary span match (no accidental substring)", () => {
+  it("does NOT match a span embedded inside a larger word", () => {
+    // The old normalized-substring rule accepted "pain" because it appears
+    // inside "explains"/"painless"; word-boundary matching rejects it.
+    expect(containsTerm("the mri clearly explains the finding", "pain")).toBe(false);
+    expect(containsTerm("recovery was painless and quick", "pain")).toBe(false);
+    const note = "The MRI clearly explains the finding; recovery was painless.";
+    const [r] = verifyGrounding(note, [{ code: "R07.9", span: "pain" }]);
+    expect(r?.supported).toBe(false);
+    expect(r?.reason).toBe("not_in_note");
+  });
+
+  it("still matches an honest whole-word span (phrase, digits, punctuation)", () => {
+    expect(containsTerm("reports chest pain on exertion", "chest pain")).toBe(true);
+    expect(containsTerm("documented as stage 3 and stable", "stage 3")).toBe(true);
+    const note = "Patient reports chest pain on exertion.";
+    const [r] = verifyGrounding(note, [{ code: "R07.9", span: "chest pain" }]);
+    expect(r?.supported).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 1 — specificity-aware grounding: a specific code needs its DISTINGUISHING
+// term in the cited span, so a generic parent-level quote can no longer buy
+// specificity. This is what makes "grounding reduces UPCODING" true, not just
+// "grounding reduces hallucination".
+// ---------------------------------------------------------------------------
+describe("grounding — specificity-aware (anti-upcoding by generic span)", () => {
+  const note =
+    "Type 2 diabetes mellitus complicated by a chronic left foot ulcer; on insulin.";
+
+  it("REJECTS a specific child cited with only the generic parent term", () => {
+    // E11.621 (foot ulcer) cited with 'type 2 diabetes mellitus' — the span IS
+    // in the note (existence passes), but it names no ulcer, so specificity
+    // grounding drops it. The old existence-only grounding would have kept it.
+    const [r] = verifyGrounding(note, [
+      { code: "E11.621", span: "type 2 diabetes mellitus" },
+    ]);
+    expect(r?.supported).toBe(false);
+    expect(r?.reason).toBe("span_lacks_specificity");
+  });
+
+  it("ACCEPTS the specific child when the span carries its distinguishing term", () => {
+    const [r] = verifyGrounding(note, [
+      { code: "E11.621", span: "chronic left foot ulcer" },
+    ]);
+    expect(r?.supported).toBe(true);
+  });
+
+  it("does not burden a ROOT code with a specificity requirement", () => {
+    const [r] = verifyGrounding(note, [
+      { code: "E11.9", span: "type 2 diabetes mellitus" },
+    ]);
+    expect(r?.supported).toBe(true);
   });
 });
 
@@ -152,6 +214,33 @@ describe("grounded coder — offline via injected client", () => {
     const r = await runVignette(agent, vignette("no-upcode-pneumonia"));
     // The fabricated upcode is gone; only the grounded principal survives.
     expect(r.trace.codes).toEqual(["J18.9"]);
+    expect(r.failures).not.toContain("upcoding");
+    expect(r.passed).toBe(true);
+  });
+
+  it("an upcoder that cites the note's GENERIC term for a SPECIFIC code is caught by specificity-aware grounding", async () => {
+    // simple-diabetes documents only 'type 2 diabetes mellitus' (E11.9). The
+    // agent upcodes to E11.621 (foot ulcer, MCC) but can cite ONLY the generic
+    // diabetes phrase — which really is in the note, so the OLD existence-only
+    // grounding would have kept E11.621 and `upcoding` would have fired.
+    // Specificity-aware grounding drops it: the span names no ulcer.
+    const agent = createGroundedCoder({
+      model: "fake",
+      client: queueClient([
+        [toolCall("propose_candidates", { candidates: ["E11.9", "E11.621"] })],
+        [
+          toolCall("assign_grounded", {
+            assignments: [
+              { code: "E11.9", span: "type 2 diabetes mellitus" },
+              { code: "E11.621", span: "type 2 diabetes mellitus" },
+            ],
+          }),
+        ],
+      ]),
+    });
+    const r = await runVignette(agent, vignette("simple-diabetes"));
+    // The upcode is gone; only the correctly-specific principal survives.
+    expect(r.trace.codes).toEqual(["E11.9"]);
     expect(r.failures).not.toContain("upcoding");
     expect(r.passed).toBe(true);
   });

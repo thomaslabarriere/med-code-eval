@@ -25,6 +25,28 @@ describe("ICD-10 hierarchy — structural integrity", () => {
     }
   });
 
+  it("every more-specific node (non-root) carries at least one distinguishing term", () => {
+    // The specificity-aware grounding guard relies on this: a code that refines
+    // a parent must declare the term(s) that separate it, or a generic span
+    // could silently justify it again (the upcoding hole this closes).
+    for (const code of ALL_CODES) {
+      const node = hierarchy[code];
+      if (node && node.parent !== null) {
+        expect(node.distinguishingTerms).toBeDefined();
+        expect((node.distinguishingTerms ?? []).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("family roots carry NO distinguishing terms (nothing to distinguish)", () => {
+    for (const code of ALL_CODES) {
+      const node = hierarchy[code];
+      if (node && node.parent === null) {
+        expect(node.distinguishingTerms).toBeUndefined();
+      }
+    }
+  });
+
   it("no ancestor chain cycles, and severity climbs with specificity", () => {
     for (const code of ALL_CODES) {
       const chain = ancestorsOf(code);

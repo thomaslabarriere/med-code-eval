@@ -58,7 +58,17 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 **Why.** This is the insight that transfers to a production coding product: a code with no documentary support in the note is the definition of both upcoding and hallucination, so **make support a structural precondition, not a hope.** The span check is objective (the quoted words are in the note, or they are not) — the same discipline as decision 1, applied to the build side. An unsupported upcode never reaches the codebook comparison because its justification does not exist in the note. The rationale the agent returns is built *without* quoting the note back, so grounding cannot itself become a PHI-leak surface.
 
-**Honest limit.** Span verification proves the quote *exists* in the note, not that it *clinically justifies* that specific code — a real coder still owns the semantic judgment. The one-shot path remains available (`--strategy oneshot`) as a disclosed baseline.
+**Honest limit.** Span verification proves the quote *exists in the note and names the distinguishing feature* (decision 6b), not that the note *clinically justifies* that specific code — a real coder still owns the semantic judgment. The one-shot path remains available (`--strategy oneshot`) as a disclosed baseline.
+
+## 6b. Grounding is SPECIFICITY-AWARE, so it guards against upcoding too — not only hallucination (war story)
+
+**Chosen.** Grounding now verifies a span in **two layers** (`coding/grounding.ts`): (1) **existence** — the quoted words really occur in the note, matched at **word boundaries** so a generic 4-letter span can no longer match by accident inside a longer word; and (2) **specificity** — a code that is more specific than its parent carries `distinguishingTerms` in the hierarchy (e.g. E11.621 → `foot ulcer`, E11.65 → `hyperglycemia`, N18.30 → `stage 3`), and the **cited span itself must mention one of them**, or the code is dropped with the reason `span_lacks_specificity`. Coding E11.621 while citing only "type 2 diabetes mellitus" now fails, even though that phrase is genuinely in the note.
+
+**Rejected.** (a) The earlier **existence-only** grounding: it verified the span was *present*, which is purely anti-hallucination — a model could upcode E11.9 → E11.621 by citing the note's generic diabetes phrase and sail through, so I had to strip the "anti-upcoding" claim from grounding and lean entirely on the separate hierarchy metric. (b) The lenient normalized-**substring** match (`includes`, `MIN_SPAN_LEN=4`): it matched "pain" inside "explains"/"painless", so a short generic span could ground a code by coincidence. (c) **Downgrading** an over-specific code to its grounded parent instead of dropping it — rejected as too clever: silently rewriting the model's code set hides the error; dropping it surfaces as an honest miss (a *safe* failure) rather than a fabricated correction.
+
+**Why.** "Grounding reduces upcoding" is only TRUE if a generic span cannot buy specificity. Existence alone could not tell an honest specific quote from an unsupported climb dressed in the parent's words — exactly the gap decision 4's hierarchy metric was left to cover alone. Making the distinguishing term a **structural precondition of the citation** closes it on the build side: the upcode is dropped before scoring, for the same reason a hallucinated code is (its justification is not in the quote the model chose).
+
+**Honest limit.** This proves the distinguishing **term** appears in the cited span, not that the surrounding text *clinically* supports the code (a span could name "ulcer" in a negated or historical context). It is lexical specificity grounding, not clinical adjudication — a real coder still owns that judgment. The distinguishing-term lists are an illustrative teaching model over the public subset, not an exhaustive ICD-10 index.
 
 ## 7. Security/compliance-weighted score, rates as fired / applicable
 
@@ -96,7 +106,7 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 - **The numbers are on a synthetic gold set:** 10 vignettes over a ~45-code public ICD-10 subset. No statistical power; they exercise the failure taxonomy, they are not a benchmark.
 - **The hierarchy is a faithful teaching model, not the official ICD-10 ontology or a CMS grouper** (decision 4). The parent/child edges and CC/MCC tiers behave correctly; they are not the real code set.
-- **Span grounding proves a citation exists, not that it clinically justifies the code** (decision 6). The semantic judgment still belongs to a real coder.
+- **Span grounding proves a citation exists AND names the distinguishing term, not that it clinically justifies the code** (decisions 6, 6b). It guards hallucination and upcoding-by-generic-span; the clinical/semantic judgment (negation, history, laterality) still belongs to a real coder.
 - **De-identification covers 11 identifier shapes with an English name heuristic** (decision 9). It is a strong pipeline first line, not a certified Safe-Harbor de-id layer.
 - **The control test is semi-circular** (decision 8): it proves no false positive on a correct coding, not recall on realistic errors.
 - **The calibration monitor is a proxy** (decision 10): reliability-score-vs-pass-rate, not true probability calibration; slow sub-threshold drift is missed.
