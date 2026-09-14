@@ -8,9 +8,9 @@ import { buildScorecard, renderScorecard } from "./eval/scorecard.js";
 import { createLLMAgent } from "./agent/runAgent.js";
 import { createGroundedCoder } from "./agent/coder.js";
 import type { Provider } from "./agent/runAgent.js";
-
-type Strategy = "grounded" | "oneshot";
 import { sendTraces } from "./obs/langfuse.js";
+import { deidentify, scanPhi } from "./pipeline/deid.js";
+import type { Vignette } from "./types.js";
 import {
   upcoderAgent,
   misSequencerAgent,
@@ -22,6 +22,8 @@ import {
   ambiguousActorAgent,
   errorAgent,
 } from "./agent/buggy.js";
+
+type Strategy = "grounded" | "oneshot";
 
 const BUGGY: Record<string, CodingAgent> = {
   upcoder: upcoderAgent,
@@ -45,6 +47,26 @@ function getFlag(args: string[], name: string): string | undefined {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
 }
 
+function hasFlag(args: string[], name: string): boolean {
+  return args.includes(`--${name}`);
+}
+
+/**
+ * De-identification pipeline stage. Replaces each vignette's narrative with a
+ * cleaned copy (identifiers redacted) BEFORE it reaches the agent, and reports
+ * what was scrubbed. The eval-time PHI probe still runs on the record's own
+ * values as defense-in-depth (the output is also re-scanned after the run).
+ */
+function deidentifyVignettes(vs: Vignette[]): { cleaned: Vignette[]; redacted: number } {
+  let redacted = 0;
+  const cleaned = vs.map((v) => {
+    const { clean, findings } = deidentify(v.narrative);
+    redacted += findings.length;
+    return { ...v, narrative: clean };
+  });
+  return { cleaned, redacted };
+}
+
 async function writeOut(out: string, data: unknown): Promise<void> {
   const dir = dirname(out);
   if (dir && dir !== ".") await mkdir(dir, { recursive: true });
@@ -62,6 +84,7 @@ function usage(): void {
       "  med-code-eval run [--strategy grounded|oneshot]  # default: grounded (multi-step)",
       "  med-code-eval run --models <m1,m2,...>      # compare several models",
       "  med-code-eval run --agent buggy:<name>      # no API key needed",
+      "  med-code-eval run --deid                    # de-identify notes before the agent",
       "",
       "Keys (set one): OPENAI_API_KEY  or  OPENROUTER_API_KEY",
       "Optional tracing: LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY",
@@ -99,11 +122,18 @@ function resolveProvider(args: string[]): Provider {
 async function evalAgent(
   agent: CodingAgent,
   model: string | undefined,
+  suite: Vignette[],
 ): Promise<Scorecard> {
-  console.log(`\nRunning ${vignettes.length} vignettes against ${agent.name}...`);
-  const results = await runVignettes(agent, vignettes);
+  console.log(`\nRunning ${suite.length} vignettes against ${agent.name}...`);
+  const results = await runVignettes(agent, suite);
   const scorecard = buildScorecard(agent.name, model, results);
   console.log(renderScorecard(scorecard));
+  // Defense-in-depth: re-scan every agent rationale for residual identifier
+  // shapes (structural, independent of the record values).
+  const residual = results.reduce((n, r) => n + scanPhi(r.trace.rationale).length, 0);
+  if (residual > 0) {
+    console.log(`  ⚠ residual PHI shapes in agent output (post-scan): ${residual}`);
+  }
   await sendTraces(agent.name, model, results);
   return scorecard;
 }
@@ -127,6 +157,14 @@ async function main(): Promise<void> {
 
   const out = getFlag(args, "out") ?? "scorecard.json";
 
+  // Optional de-identification pipeline stage (opt-in via --deid).
+  let suite = vignettes;
+  if (hasFlag(args, "deid")) {
+    const { cleaned, redacted } = deidentifyVignettes(vignettes);
+    suite = cleaned;
+    console.log(`[deid] redacted ${redacted} identifier(s) across ${cleaned.length} notes before the agent.`);
+  }
+
   const agentFlag = getFlag(args, "agent");
   if (agentFlag) {
     const name = agentFlag.replace(/^buggy:/, "");
@@ -136,7 +174,7 @@ async function main(): Promise<void> {
         `Unknown agent "${agentFlag}". Available: ${Object.keys(BUGGY).map((n) => `buggy:${n}`).join(", ")}`,
       );
     }
-    await writeOut(out, await evalAgent(agent, undefined));
+    await writeOut(out, await evalAgent(agent, undefined, suite));
     return;
   }
 
@@ -151,7 +189,7 @@ async function main(): Promise<void> {
     }
     const cards: Scorecard[] = [];
     for (const model of models) {
-      cards.push(await evalAgent(createModelAgent(strategy, { model, provider }), model));
+      cards.push(await evalAgent(createModelAgent(strategy, { model, provider }), model, suite));
     }
     console.log(renderComparison(cards));
     await writeOut(out, cards);
@@ -159,7 +197,7 @@ async function main(): Promise<void> {
   }
 
   const model = getFlag(args, "model") ?? DEFAULT_MODEL[provider];
-  await writeOut(out, await evalAgent(createModelAgent(strategy, { model, provider }), model));
+  await writeOut(out, await evalAgent(createModelAgent(strategy, { model, provider }), model, suite));
 }
 
 main().catch((err: unknown) => {
