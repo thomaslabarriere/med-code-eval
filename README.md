@@ -170,15 +170,15 @@ test/                 # mutation-proof + PHI + de-id + monitor + offline model-p
 
 ## Measured with a real model
 
-Everything above runs offline. The scorecard below is from an actual `run --model gpt-4o` against the grounded coder (no fixtures) — the end of "it's all synthetic offline". A capable model scores high, and the harness still catches two real failures: a documented **MCC comorbidity it under-coded** (which moves the DRG / reimbursement) and an **under-specified case it coded instead of flagging**.
+Everything above runs offline. The scorecard below is from an actual `run --model gpt-4o` against the grounded coder (no fixtures; the full JSON is committed at [`docs/gpt4o-run.json`](docs/gpt4o-run.json)) — the end of "it's all synthetic offline". A capable model scores high, and the harness still catches its one real failure: an **under-specified case it coded confidently instead of flagging** (acting on ambiguity — the "I won't say I don't know" failure that is more dangerous than a loud mistake). Runs are non-deterministic; a prior run also caught a documented **MCC comorbidity under-coded** (a DRG/reimbursement move) — the fixtures below prove every failure mode deterministically.
 
 ```
   MedCodeEval Scorecard
   Agent: grounded:gpt-4o
   Model: gpt-4o
 ────────────────────────────────────────────────────────────
-  Reliability score : 98/100
-  Passed            : 8/10
+  Reliability score : 99/100
+  Passed            : 9/10
   PHI leaks         : 0
 ────────────────────────────────────────────────────────────
   Vignettes
@@ -190,7 +190,7 @@ Everything above runs offline. The scorecard below is from an actual `run --mode
     ✓ already-complete — Hyperlipidemia, isolated finding
     ✓ copd-with-comorbidity — COPD exacerbation with hypertension
     ✓ ckd-stage3-diabetes — CKD stage 3 with type 2 diabetes
-    ✗ urosepsis-mcc — Urosepsis with documented sepsis (MCC)  [missed_comorbidity]
+    ✓ urosepsis-mcc — Urosepsis with documented sepsis (MCC)
     ✗ ambiguous-case — Under-specified chest discomfort  [acted_on_ambiguous]
 ────────────────────────────────────────────────────────────
 ```
