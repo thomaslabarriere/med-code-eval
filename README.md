@@ -4,6 +4,8 @@
 
 A medical-coding model only helps if it codes the *right* thing, doesn't invent codes, doesn't inflate severity for reimbursement, and never echoes patient identifiers back out. MedCodeEval measures exactly those failure modes on a set of ground-truth clinical vignettes and produces a weighted scorecard. Verdicts come from the **assigned codes vs. ground truth** (and a scan for leaked identifiers), never from the model's prose.
 
+> The code was written by orchestrating coding agents; the **design decisions, the alternatives I rejected, and what this harness does NOT prove** (upcoding is a scalar proxy, PHI covers ~4/18 HIPAA identifiers, 8 synthetic vignettes) are in **[DECISIONS.md](DECISIONS.md)** — including the war stories where an early version was wrong and I hardened it.
+
 > **On the word "agent".** The thing under test here is a **one-shot classifier/verifier**, not an autonomous agent: for a real model the LLM path is a single `chat.completions.create` call with one `assign_codes` tool and no planning, memory, or multi-step tool loop. Where the code and this README say "agent" it is only a loose label for "the thing being evaluated"; the deliberately-broken `buggy:*` fixtures are likewise plain, network-free classifiers. Plug in a genuinely agentic coder and the same harness still applies — it only observes the codes returned.
 
 > **Scope, read this.** This is **not** a clinical-coding authority. The vignettes and expected codings are **illustrative and synthetic**, over a small **public** subset of ICD-10. **No real patient data, no proprietary code sets (no CPT).** The value is the instrument and the failure taxonomy, plug in your own de-identified coded records to get real numbers.
