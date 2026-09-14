@@ -6,7 +6,10 @@ import { vignettes } from "./scenarios/vignettes.js";
 import { runVignettes } from "./runner.js";
 import { buildScorecard, renderScorecard } from "./eval/scorecard.js";
 import { createLLMAgent } from "./agent/runAgent.js";
+import { createGroundedCoder } from "./agent/coder.js";
 import type { Provider } from "./agent/runAgent.js";
+
+type Strategy = "grounded" | "oneshot";
 import { sendTraces } from "./obs/langfuse.js";
 import {
   upcoderAgent,
@@ -56,6 +59,7 @@ function usage(): void {
       "",
       "Usage:",
       "  med-code-eval run [--provider openai|openrouter] [--model <model>]",
+      "  med-code-eval run [--strategy grounded|oneshot]  # default: grounded (multi-step)",
       "  med-code-eval run --models <m1,m2,...>      # compare several models",
       "  med-code-eval run --agent buggy:<name>      # no API key needed",
       "",
@@ -65,6 +69,21 @@ function usage(): void {
       `Buggy agents: ${Object.keys(BUGGY).map((n) => `buggy:${n}`).join(", ")}`,
     ].join("\n"),
   );
+}
+
+function resolveStrategy(args: string[]): Strategy {
+  const flag = getFlag(args, "strategy");
+  if (flag === "oneshot") return "oneshot";
+  // Default is the real multi-step grounded coder built in agent/coder.ts.
+  return "grounded";
+}
+
+/** Build the model-backed agent for the chosen strategy. */
+function createModelAgent(
+  strategy: Strategy,
+  opts: { model: string; provider: Provider },
+): CodingAgent {
+  return strategy === "oneshot" ? createLLMAgent(opts) : createGroundedCoder(opts);
 }
 
 function resolveProvider(args: string[]): Provider {
@@ -122,6 +141,7 @@ async function main(): Promise<void> {
   }
 
   const provider = resolveProvider(args);
+  const strategy = resolveStrategy(args);
 
   const modelsFlag = getFlag(args, "models");
   if (modelsFlag !== undefined) {
@@ -131,7 +151,7 @@ async function main(): Promise<void> {
     }
     const cards: Scorecard[] = [];
     for (const model of models) {
-      cards.push(await evalAgent(createLLMAgent({ model, provider }), model));
+      cards.push(await evalAgent(createModelAgent(strategy, { model, provider }), model));
     }
     console.log(renderComparison(cards));
     await writeOut(out, cards);
@@ -139,7 +159,7 @@ async function main(): Promise<void> {
   }
 
   const model = getFlag(args, "model") ?? DEFAULT_MODEL[provider];
-  await writeOut(out, await evalAgent(createLLMAgent({ model, provider }), model));
+  await writeOut(out, await evalAgent(createModelAgent(strategy, { model, provider }), model));
 }
 
 main().catch((err: unknown) => {
