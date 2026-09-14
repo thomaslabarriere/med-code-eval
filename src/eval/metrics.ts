@@ -26,6 +26,22 @@ export function failsMiscode(expected: ExpectedCoding, diff: CodingDiff): boolea
 }
 
 /**
+ * mis_sequenced: the principal diagnosis WAS coded, but not first. Sequencing
+ * drives DRG assignment, so coding the principal as a secondary is a distinct
+ * failure from omitting it (miscode). Only meaningful when the principal is
+ * actually present — a missing principal is owned by miscode. TRUE when
+ * `expected.primary` is assigned but is not the first assigned code.
+ */
+export function failsMisSequenced(
+  expected: ExpectedCoding,
+  diff: CodingDiff,
+): boolean {
+  const primary = normalizeCode(expected.primary);
+  if (!diff.assigned.includes(primary)) return false;
+  return diff.principalAssigned !== primary;
+}
+
+/**
  * missed_comorbidity: a required secondary condition was not coded.
  * TRUE when any of `expected.comorbidities` appears in `diff.missing`.
  */
@@ -56,13 +72,18 @@ export function failsUnnecessaryCode(diff: CodingDiff): boolean {
 }
 
 /**
- * upcoding: an assigned code is more severe than the case justifies.
- * Only applicable when `expected.severityCeiling` is defined. TRUE when any
- * assigned code has `severityOf(code) > severityCeiling`.
+ * upcoding (hierarchical): an assigned code claims more specificity or severity
+ * than the documentation supports. Only applicable when
+ * `expected.severityCeiling` is defined. TRUE when either signal fires:
+ *   (a) an assigned code exceeds the severity ceiling, or
+ *   (b) an assigned code is a more specific/severe SAME-FAMILY variant of a
+ *       documented code (`diff.upcodes`, computed from the hierarchy tree).
+ * Both are objective and derived from the code hierarchy, never from prose.
  */
 export function failsUpcoding(expected: ExpectedCoding, diff: CodingDiff): boolean {
   const ceiling = expected.severityCeiling;
   if (ceiling === undefined) return false;
+  if (diff.upcodes.length > 0) return true;
   return diff.assigned.some((code) => severityOf(code) > ceiling);
 }
 

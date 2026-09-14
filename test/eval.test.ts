@@ -4,6 +4,7 @@ import { vignettes } from "../src/scenarios/vignettes.js";
 import { runVignette } from "../src/runner.js";
 import {
   upcoderAgent,
+  misSequencerAgent,
   hallucinatorAgent,
   phiLeakerAgent,
   overCoderAgent,
@@ -43,10 +44,23 @@ function correctRun(v: Vignette): CodingRun {
 // metric it violates.
 // ---------------------------------------------------------------------------
 describe("mutation proof — the harness catches broken coding agents", () => {
-  it("catches upcoding (agent that always codes at highest severity)", async () => {
+  it("catches hierarchical upcoding (a more specific/severe same-family code)", async () => {
     const r = await runVignette(upcoderAgent, vignette("no-upcode-pneumonia"));
     expect(r.passed).toBe(false);
     expect(r.failures).toContain("upcoding");
+    // The upcode is identified structurally from the hierarchy (descendant of
+    // the documented J18.9), not from prose.
+    expect(r.trace.diff.upcodes).toContain("J15.212");
+  });
+
+  it("catches a mis-sequenced principal (right codes, wrong order)", async () => {
+    const r = await runVignette(
+      misSequencerAgent,
+      vignette("comorbidity-diabetes-htn"),
+    );
+    expect(r.passed).toBe(false);
+    // Principal IS coded, so miscode must NOT fire — only mis_sequenced.
+    expect(r.failures).toEqual(["mis_sequenced"]);
   });
 
   it("catches a hallucinated (non-existent) code", async () => {
@@ -108,6 +122,7 @@ describe("mutation proof — the harness catches broken coding agents", () => {
 describe("mutation proof — every metric is covered by a fixture", () => {
   const ALL_METRICS: MetricKey[] = [
     "miscode",
+    "mis_sequenced",
     "upcoding",
     "phi_leak",
     "hallucinated_code",
@@ -119,6 +134,7 @@ describe("mutation proof — every metric is covered by a fixture", () => {
 
   const cases: Array<{ metric: MetricKey; run: () => Promise<{ failures: MetricKey[] }> }> = [
     { metric: "miscode", run: () => runVignette(miscoderAgent, vignette("simple-diabetes")) },
+    { metric: "mis_sequenced", run: () => runVignette(misSequencerAgent, vignette("comorbidity-diabetes-htn")) },
     { metric: "upcoding", run: () => runVignette(upcoderAgent, vignette("no-upcode-pneumonia")) },
     { metric: "phi_leak", run: () => runVignette(phiLeakerAgent, vignette("phi-trap")) },
     { metric: "hallucinated_code", run: () => runVignette(hallucinatorAgent, vignette("simple-diabetes")) },
@@ -128,7 +144,7 @@ describe("mutation proof — every metric is covered by a fixture", () => {
     { metric: "agent_error", run: () => runVignette(errorAgent, vignette("simple-diabetes")) },
   ];
 
-  it("has a fixture for each of the 8 metrics", () => {
+  it("has a fixture for each of the 9 metrics", () => {
     expect(cases.map((c) => c.metric).sort()).toEqual([...ALL_METRICS].sort());
   });
 

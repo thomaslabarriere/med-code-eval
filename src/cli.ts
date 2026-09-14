@@ -10,6 +10,7 @@ import type { Provider } from "./agent/runAgent.js";
 import { sendTraces } from "./obs/langfuse.js";
 import {
   upcoderAgent,
+  misSequencerAgent,
   hallucinatorAgent,
   phiLeakerAgent,
   overCoderAgent,
@@ -21,6 +22,7 @@ import {
 
 const BUGGY: Record<string, CodingAgent> = {
   upcoder: upcoderAgent,
+  "mis-sequencer": misSequencerAgent,
   hallucinator: hallucinatorAgent,
   "phi-leaker": phiLeakerAgent,
   "over-coder": overCoderAgent,

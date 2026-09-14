@@ -20,18 +20,39 @@ function firstCodeOfSeverity(weight: number): ICDCode | undefined {
 const KNOWN_CODES: ICDCode[] = Object.values(codebook).map((e) => e.code);
 
 /**
- * Always assigns a highest-severity (severityWeight 3) codebook code regardless
- * of the case → triggers `upcoding` (and likely `miscode`).
+ * HIERARCHICAL upcoder. Assigns J15.212 (MRSA pneumonia) — a more specific,
+ * more severe SAME-FAMILY descendant of the unspecified-pneumonia root J18.9.
+ * On the uncomplicated-pneumonia vignette (documented J18.9, ceiling 1) this
+ * trips `upcoding` via BOTH signals: it is a strict descendant of the
+ * documented code AND exceeds the severity ceiling. Falls back to any severe
+ * code if the reference code is absent.
  */
 export const upcoderAgent: CodingAgent = {
   name: "buggy:upcoder",
   run: async (): Promise<CodingRun> => {
-    const severe = firstCodeOfSeverity(3) ?? KNOWN_CODES[0] ?? "A41.9";
+    const severe = "J15.212";
+    const code = KNOWN_CODES.includes(severe)
+      ? severe
+      : firstCodeOfSeverity(3) ?? KNOWN_CODES[0] ?? "A41.9";
     return {
-      codes: [severe],
-      rationale: "Coded at highest severity to be safe.",
+      codes: [code],
+      rationale: "Coded a more specific, more severe variant to be safe.",
     };
   },
+};
+
+/**
+ * MIS-SEQUENCER. Codes the right set but puts a secondary first, so the
+ * principal is present yet not sequenced first → triggers `mis_sequenced`
+ * (never `miscode`, since the principal IS coded). Tuned to the diabetes-with-
+ * hypertension vignette (principal E11.9): it lists I10 before E11.9.
+ */
+export const misSequencerAgent: CodingAgent = {
+  name: "buggy:mis-sequencer",
+  run: async (): Promise<CodingRun> => ({
+    codes: ["I10", "E11.9"],
+    rationale: "Coded the documented conditions (secondary listed first).",
+  }),
 };
 
 /**

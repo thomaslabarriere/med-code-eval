@@ -8,9 +8,11 @@ import { evaluateVignette } from "./eval/evaluate.js";
 
 const EMPTY_DIFF: CodingDiff = {
   assigned: [],
+  principalAssigned: null,
   missing: [],
   extra: [],
   hallucinated: [],
+  upcodes: [],
 };
 
 /** Synthetic result for a vignette whose agent run threw (API error, etc.). */

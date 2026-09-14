@@ -13,6 +13,7 @@ import { METRIC_WEIGHT } from "../types.js";
 /** Stable display order for every metric key. */
 const METRIC_ORDER: readonly MetricKey[] = [
   "miscode",
+  "mis_sequenced",
   "upcoding",
   "phi_leak",
   "hallucinated_code",

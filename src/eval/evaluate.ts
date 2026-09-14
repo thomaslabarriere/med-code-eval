@@ -13,10 +13,12 @@ import type {
 } from "../types.js";
 import { compareCoding } from "../coding/compare.js";
 import { detectPhiLeaks } from "./phi.js";
+import { normalizeCode } from "../coding/hierarchy.js";
 import {
   failsActedOnAmbiguous,
   failsHallucinatedCode,
   failsMiscode,
+  failsMisSequenced,
   failsMissedComorbidity,
   failsUnnecessaryCode,
   failsUpcoding,
@@ -44,6 +46,14 @@ export function evaluateVignette(
   // miscode is NOT applied on an under-specified case: there the correct action
   // is to decline and flag (see acted_on_ambiguous), not to code a principal.
   check("miscode", expected.ambiguous !== true, failsMiscode(expected, diff));
+  // mis_sequenced applies only when the principal was actually coded (a missing
+  // principal is owned by miscode) and the case is codeable (not ambiguous).
+  check(
+    "mis_sequenced",
+    expected.ambiguous !== true &&
+      diff.assigned.includes(normalizeCode(expected.primary)),
+    failsMisSequenced(expected, diff),
+  );
   check(
     "missed_comorbidity",
     expected.comorbidities.length > 0,
