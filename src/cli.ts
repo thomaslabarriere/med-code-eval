@@ -1,7 +1,14 @@
 #!/usr/bin/env node
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CodingAgent, Scorecard } from "./types.js";
+import {
+  monitorSeries,
+  renderMonitorReport,
+  summarizeScorecard,
+  syntheticDriftingSeries,
+  type RunSummary,
+} from "./monitor/drift.js";
 import { vignettes } from "./scenarios/vignettes.js";
 import { runVignettes } from "./runner.js";
 import { buildScorecard, renderScorecard } from "./eval/scorecard.js";
@@ -85,6 +92,8 @@ function usage(): void {
       "  med-code-eval run --models <m1,m2,...>      # compare several models",
       "  med-code-eval run --agent buggy:<name>      # no API key needed",
       "  med-code-eval run --deid                    # de-identify notes before the agent",
+      "  med-code-eval monitor [scorecard.json ...]  # drift/upcoding monitor over a series",
+      "                                              # no files → synthetic demo series",
       "",
       "Keys (set one): OPENAI_API_KEY  or  OPENROUTER_API_KEY",
       "Optional tracing: LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY",
@@ -148,8 +157,47 @@ function renderComparison(cards: Scorecard[]): string {
   return ["", "=".repeat(64), "Model comparison", "-".repeat(64), rows, "=".repeat(64)].join("\n");
 }
 
+/**
+ * Load saved scorecard JSON files into a run series. Each file is either a
+ * single Scorecard or an array of them (from `run --models`); every scorecard
+ * found, in file then in-file order, becomes one point in the series.
+ */
+async function loadSeries(paths: string[]): Promise<RunSummary[]> {
+  const series: RunSummary[] = [];
+  for (const path of paths) {
+    const raw = JSON.parse(await readFile(path, "utf8")) as unknown;
+    const cards = Array.isArray(raw) ? (raw as Scorecard[]) : [raw as Scorecard];
+    for (const card of cards) series.push(summarizeScorecard(card));
+  }
+  return series;
+}
+
+/**
+ * `monitor` subcommand: build a run series (from saved scorecards, or a clearly
+ * synthetic demo when no files are given), run the pure detectors, and render
+ * the alerts. Fully offline.
+ */
+async function monitorCommand(paths: string[]): Promise<void> {
+  let series: RunSummary[];
+  if (paths.length > 0) {
+    series = await loadSeries(paths);
+  } else {
+    console.log("[monitor] no scorecard files given — using a synthetic demo series (not real data).");
+    series = syntheticDriftingSeries();
+  }
+  const alerts = monitorSeries(series);
+  console.log(renderMonitorReport(series, alerts));
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+
+  if (args[0] === "monitor") {
+    const paths = args.slice(1).filter((a) => !a.startsWith("--"));
+    await monitorCommand(paths);
+    return;
+  }
+
   if (args[0] !== "run") {
     usage();
     process.exit(args[0] ? 1 : 0);
