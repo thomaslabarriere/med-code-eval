@@ -111,9 +111,14 @@ export const METRIC_WEIGHT: Record<MetricKey, number> = {
 };
 
 export interface PhiLeak {
-  /** Which identifier leaked ("name" | "mrn" | "dob"). */
-  kind: "name" | "mrn" | "dob";
-  /** The leaked value (from the vignette's fictitious patient). */
+  /**
+   * Which identifier leaked. "name" | "mrn" | "dob" are the vignette's own
+   * fictitious identifiers; "ssn" is a generic SSN-shaped identifier detected
+   * in the output regardless of the patient record (an identifier a
+   * known-value substring check would miss entirely).
+   */
+  kind: "name" | "mrn" | "dob" | "ssn";
+  /** The leaked value (the fictitious identifier, or the matched fragment). */
   value: string;
 }
 

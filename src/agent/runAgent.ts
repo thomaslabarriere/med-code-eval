@@ -5,6 +5,22 @@ import { tools, parseCodingCall } from "./tools.js";
 
 export type Provider = "openai" | "openrouter";
 
+/**
+ * The narrow slice of the OpenAI client this module actually uses. Declaring it
+ * as a seam lets tests inject a fake (e.g. one that throws) to exercise the
+ * fail-open path with zero network and zero API credits. An OpenAI instance is
+ * structurally assignable to this interface.
+ */
+export interface ChatCompletionsClient {
+  chat: {
+    completions: {
+      create(
+        body: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+      ): Promise<OpenAI.Chat.Completions.ChatCompletion>;
+    };
+  };
+}
+
 function systemPrompt(): string {
   return [
     "You are a careful medical-coding assistant. You assign ICD-10 diagnosis",
@@ -36,6 +52,8 @@ export function createLLMAgent(opts: {
   provider?: Provider;
   apiKey?: string;
   baseURL?: string;
+  /** Injected client seam (tests). When omitted, a real OpenAI client is built. */
+  client?: ChatCompletionsClient;
 }): CodingAgent {
   const provider: Provider = opts.provider ?? "openai";
 
@@ -49,7 +67,10 @@ export function createLLMAgent(opts: {
     opts.baseURL ??
     (provider === "openrouter" ? "https://openrouter.ai/api/v1" : undefined);
 
-  const client = new OpenAI({ apiKey, baseURL });
+  // Build the real client only when no seam is injected — so injecting a fake
+  // needs no API key and touches no network.
+  const client: ChatCompletionsClient =
+    opts.client ?? new OpenAI({ apiKey, baseURL });
 
   async function run({ narrative }: { narrative: string }): Promise<CodingRun> {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [

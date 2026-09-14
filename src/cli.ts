@@ -13,6 +13,10 @@ import {
   hallucinatorAgent,
   phiLeakerAgent,
   overCoderAgent,
+  miscoderAgent,
+  missedComorbidityAgent,
+  ambiguousActorAgent,
+  errorAgent,
 } from "./agent/buggy.js";
 
 const BUGGY: Record<string, CodingAgent> = {
@@ -20,6 +24,10 @@ const BUGGY: Record<string, CodingAgent> = {
   hallucinator: hallucinatorAgent,
   "phi-leaker": phiLeakerAgent,
   "over-coder": overCoderAgent,
+  miscoder: miscoderAgent,
+  "missed-comorbidity": missedComorbidityAgent,
+  "ambiguous-actor": ambiguousActorAgent,
+  error: errorAgent,
 };
 
 const DEFAULT_MODEL: Record<Provider, string> = {

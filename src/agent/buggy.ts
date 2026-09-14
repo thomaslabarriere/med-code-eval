@@ -71,6 +71,62 @@ export const overCoderAgent: CodingAgent = {
   }),
 };
 
+/**
+ * Assigns NO principal code (declines to code the case) → on any codeable
+ * (non-ambiguous) vignette the principal diagnosis is absent, triggering
+ * `miscode`. It assigns nothing else, so on a vignette with no required
+ * comorbidities it trips `miscode` and nothing else.
+ */
+export const miscoderAgent: CodingAgent = {
+  name: "buggy:miscoder",
+  run: async (): Promise<CodingRun> => ({
+    codes: [],
+    rationale: "No principal diagnosis assigned.",
+  }),
+};
+
+/**
+ * Codes only a single principal diagnosis and never the documented
+ * comorbidities → on a vignette that requires a secondary condition this
+ * triggers `missed_comorbidity` while still coding the principal (so it does
+ * NOT trip `miscode`). Tuned to the diabetes-with-hypertension vignette whose
+ * principal is E11.9.
+ */
+export const missedComorbidityAgent: CodingAgent = {
+  name: "buggy:missed-comorbidity",
+  run: async (): Promise<CodingRun> => ({
+    codes: ["E11.9"],
+    rationale: "Coded the principal diagnosis only.",
+  }),
+};
+
+/**
+ * On an under-specified case the correct action is to DECLINE and flag the gap;
+ * this agent instead assigns a confident code anyway → triggers
+ * `acted_on_ambiguous`. It assigns the symptom code the ambiguous vignette
+ * would forcibly map to (R07.9), so on that vignette it trips
+ * `acted_on_ambiguous` and nothing else.
+ */
+export const ambiguousActorAgent: CodingAgent = {
+  name: "buggy:ambiguous-actor",
+  run: async (): Promise<CodingRun> => ({
+    codes: ["R07.9"],
+    rationale: "Assigned a provisional code despite insufficient documentation.",
+  }),
+};
+
+/**
+ * Throws on every run → the runner isolates the failure and records
+ * `agent_error` for that vignette (never aborting the whole run, never
+ * fabricating a code). Proves the error-isolation metric.
+ */
+export const errorAgent: CodingAgent = {
+  name: "buggy:error",
+  run: async (): Promise<CodingRun> => {
+    throw new Error("simulated agent failure");
+  },
+};
+
 /** One scripted answer: return `run` when `match` is a substring of the narrative. */
 export interface ScriptedAnswer {
   match: string;
