@@ -106,6 +106,9 @@ function assignSystemPrompt(candidates: ICDCode[]): string {
     "- Order the codes with the PRINCIPAL diagnosis first, then secondaries.",
     "- For EACH code cite a verbatim span copied from the note that documents it.",
     "- A code with no documentary support in the note MUST be omitted.",
+    "- For a MORE SPECIFIC or MORE SEVERE code, the span MUST quote the specific",
+    "  finding itself (e.g. cite 'foot ulcer' for E11.621, not just 'type 2",
+    "  diabetes'). A generic quote will NOT justify a specific code.",
     "- Never put a patient identifier (name, MRN, DOB) in a span or elsewhere.",
     "- Do not upcode: if only an unspecified condition is documented, code that.",
     "",
@@ -185,15 +188,25 @@ function buildRationale(grounding: GroundingResult[]): string {
     return "No documented diagnosis could be grounded in the note; declined to code.";
   }
   const kept = grounding.filter((g) => g.supported).map((g) => g.code);
-  const dropped = grounding.filter((g) => !g.supported).map((g) => g.code);
+  const dropped = grounding.filter((g) => !g.supported);
   const parts = [
     kept.length > 0
       ? `Coded ${kept.join(", ")}, each supported by a cited passage of the note.`
       : "No code survived grounding.",
   ];
-  if (dropped.length > 0) {
+  // Separate the two drop causes so the rationale is honest about WHY: an absent
+  // citation (hallucination) vs. a citation that exists but names only the
+  // generic parent condition (upcoding-by-generic-span).
+  const notInNote = dropped.filter((g) => g.reason !== "span_lacks_specificity").map((g) => g.code);
+  const notSpecific = dropped.filter((g) => g.reason === "span_lacks_specificity").map((g) => g.code);
+  if (notInNote.length > 0) {
     parts.push(
-      `Rejected ${dropped.join(", ")} — the cited support was not found in the note.`,
+      `Rejected ${notInNote.join(", ")} — the cited support was not found in the note.`,
+    );
+  }
+  if (notSpecific.length > 0) {
+    parts.push(
+      `Rejected ${notSpecific.join(", ")} — the citation did not document the specific finding the code requires.`,
     );
   }
   return parts.join(" ");
