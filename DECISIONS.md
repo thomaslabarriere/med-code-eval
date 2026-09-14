@@ -50,7 +50,7 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 **Why.** Coding the right diagnoses but sequencing a secondary as principal is a real, money-moving error a set comparison is blind to. Splitting `miscode` (absent principal) from `mis_sequenced` (present but misplaced) keeps the two attributable, both weighted 3.
 
-## 6. The graded agent is a GROUNDED, multi-step coder — and grounding is the anti-upcoding guard (Phase 2)
+## 6. The graded agent is a GROUNDED, multi-step coder — and grounding is the anti-HALLUCINATION guard (Phase 2)
 
 **Chosen.** The default model path (`agent/coder.ts`) is not one-shot. It (1) **proposes** candidate codes from the hierarchy, (2) **assigns** final codes each with a cited verbatim **span** of the note, sequenced principal-first, and (3) **verifies** every span against the note (`coding/grounding.ts`), **dropping any code whose citation is not actually in the note** before scoring. Every step runs through the same `ChatClient` seam as the one-shot path, so tests inject a fake client and run fully offline.
 

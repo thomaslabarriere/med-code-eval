@@ -7,7 +7,7 @@ A medical-coding model only helps if it codes the *right* thing, doesn't invent 
 1. **A grounded, multi-step coding agent** (`agent/coder.ts`) that proposes candidate ICD-10 codes from a specificity hierarchy, cites a verbatim span of the note for each, verifies that span really occurs in the note, drops any code it cannot ground, and sequences the survivors principal-first.
 2. **The evaluation + monitoring instrument** that measures the failure modes on ground-truth vignettes and produces a weighted scorecard, then watches a series of runs for drift. Verdicts come from the **assigned codes vs. ground truth** (and a scan for leaked identifiers), never from the model's prose.
 
-The insight that runs through both: **every assigned code must cite documentary support in the note, or it is rejected by construction.** That is the structural guard against upcoding and hallucination — a severity the record does not document cannot be billed.
+The insight that runs through both: **every assigned code must cite a real span of the note, or it is dropped by construction.** That is the structural guard against **hallucinated** codes. Upcoding — a more specific or more severe code than the documentation supports — is caught **separately**, by the specificity hierarchy metric, not by grounding: span verification proves the quote *exists*, not that it *justifies the code's specificity* (a limit stated plainly in [DECISIONS.md](DECISIONS.md)).
 
 > The code was written by orchestrating coding agents; the **design decisions, the alternatives I rejected, and what this harness does NOT prove** are in **[DECISIONS.md](DECISIONS.md)** — including the war stories where an early version was wrong and I hardened it, and every place a model is still a teaching/proxy stand-in (the hierarchy is not the official ICD-10 ontology; de-id is a strong first line, not certified Safe-Harbor; the calibration monitor is a proxy; 10 synthetic vignettes).
 
@@ -58,7 +58,7 @@ export LANGFUSE_SECRET_KEY=sk-...
 | Capability | Where | What it does |
 |---|---|---|
 | **Grounded multi-step agent** | `agent/coder.ts` | Propose candidates → cite a span per code → verify the span is in the note → drop the ungrounded → sequence principal-first. |
-| **Documentary grounding** | `coding/grounding.ts` | Objective span verification: a code whose citation isn't in the note is rejected before scoring. Anti-upcoding + anti-hallucination guard. |
+| **Documentary grounding** | `coding/grounding.ts` | Objective span verification: a code whose citation isn't in the note is dropped before scoring. Anti-**hallucination** guard (upcoding is caught by the hierarchy metric, not here — grounding proves the span exists, not that it justifies the code's specificity). |
 | **ICD-10 specificity hierarchy** | `coding/hierarchy.ts` | ~45 public codes over 6 families as a parent/child tree with severity tiers and DRG-style CC/MCC capture. Upcoding = an unsupported same-family climb. |
 | **Principal/secondary sequencing** | `eval/metrics.ts` | Coding is an ordered list; mis-sequencing the principal is its own weighted failure (it drives DRG assignment). |
 | **De-identification pipeline** | `pipeline/deid.ts` | Scrubs identifier *shapes* (11 HIPAA families) from the note before the agent and re-scans the output after. |
