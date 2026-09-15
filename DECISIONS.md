@@ -32,7 +32,7 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 **Relationship to the de-id pipeline (decision 9).** This probe is a value-aware *output* check at eval time; the de-id stage is a shape-aware *pipeline* scrubber. They are deliberately different and defensive-in-depth: the probe knows the record's values, the pipeline detects identifier shapes it has never seen.
 
-## 4. Upcoding is HIERARCHICAL, not a scalar proxy (Phase 1 — this is the one a coder judges first)
+## 4. Upcoding is HIERARCHICAL, not a scalar proxy (Phase 1, this is the one a coder judges first)
 
 **Chosen.** `coding/hierarchy.ts` encodes an illustrative, public subset of ICD-10 (~45 codes, 6 families) as a **specificity tree**: each node points at the less-specific / less-severe parent of the same condition, and carries a severity tier (1→4) and a DRG-style CC/MCC capture. Upcoding is now defined structurally: an assigned code that is a **more specific / more severe same-family descendant** of what the documentation supports (`diff.upcodes`, walked from the tree), *or* a code above the vignette's `severityCeiling`. `failsUpcoding` fires on either.
 
@@ -44,31 +44,31 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 ## 5. Coding is a SEQUENCED list, and mis-sequencing is its own failure (Phase 1)
 
-**Chosen.** A coding is an **ordered** list: the principal diagnosis first, then secondaries. The diff records `principalAssigned` (the first assigned code). `mis_sequenced` fires when the principal *is* coded but *not* first — a distinct failure from omitting it (`miscode`), because sequencing the principal drives DRG assignment and therefore reimbursement.
+**Chosen.** A coding is an **ordered** list: the principal diagnosis first, then secondaries. The diff records `principalAssigned` (the first assigned code). `mis_sequenced` fires when the principal *is* coded but *not* first, a distinct failure from omitting it (`miscode`), because sequencing the principal drives DRG assignment and therefore reimbursement.
 
 **Rejected:** the original unordered-set comparison, where a coding was just a bag of codes.
 
 **Why.** Coding the right diagnoses but sequencing a secondary as principal is a real, money-moving error a set comparison is blind to. Splitting `miscode` (absent principal) from `mis_sequenced` (present but misplaced) keeps the two attributable, both weighted 3.
 
-## 6. The graded agent is a GROUNDED, multi-step coder — and grounding is the anti-HALLUCINATION guard (Phase 2)
+## 6. The graded agent is a GROUNDED, multi-step coder, and grounding is the anti-HALLUCINATION guard (Phase 2)
 
 **Chosen.** The default model path (`agent/coder.ts`) is not one-shot. It (1) **proposes** candidate codes from the hierarchy, (2) **assigns** final codes each with a cited verbatim **span** of the note, sequenced principal-first, and (3) **verifies** every span against the note (`coding/grounding.ts`), **dropping any code whose citation is not actually in the note** before scoring. Every step runs through the same `ChatClient` seam as the one-shot path, so tests inject a fake client and run fully offline.
 
 **Rejected:** trusting the model to self-report which codes are "supported"; and keeping only the one-shot classifier.
 
-**Why.** This is the insight that transfers to a production coding product: a code with no documentary support in the note is the definition of both upcoding and hallucination, so **make support a structural precondition, not a hope.** The span check is objective (the quoted words are in the note, or they are not) — the same discipline as decision 1, applied to the build side. An unsupported upcode never reaches the codebook comparison because its justification does not exist in the note. The rationale the agent returns is built *without* quoting the note back, so grounding cannot itself become a PHI-leak surface.
+**Why.** This is the insight that transfers to a production coding product: a code with no documentary support in the note is the definition of both upcoding and hallucination, so **make support a structural precondition, not a hope.** The span check is objective (the quoted words are in the note, or they are not), the same discipline as decision 1, applied to the build side. An unsupported upcode never reaches the codebook comparison because its justification does not exist in the note. The rationale the agent returns is built *without* quoting the note back, so grounding cannot itself become a PHI-leak surface.
 
-**Honest limit.** Span verification proves the quote *exists in the note and names the distinguishing feature* (decision 6b), not that the note *clinically justifies* that specific code — a real coder still owns the semantic judgment. The one-shot path remains available (`--strategy oneshot`) as a disclosed baseline.
+**Honest limit.** Span verification proves the quote *exists in the note and names the distinguishing feature* (decision 6b), not that the note *clinically justifies* that specific code; a real coder still owns the semantic judgment. The one-shot path remains available (`--strategy oneshot`) as a disclosed baseline.
 
-## 6b. Grounding is SPECIFICITY-AWARE, so it guards against upcoding too — not only hallucination (war story)
+## 6b. Grounding is SPECIFICITY-AWARE, so it guards against upcoding too, not only hallucination (war story)
 
-**Chosen.** Grounding now verifies a span in **two layers** (`coding/grounding.ts`): (1) **existence** — the quoted words really occur in the note, matched at **word boundaries** so a generic 4-letter span can no longer match by accident inside a longer word; and (2) **specificity** — a code that is more specific than its parent carries `distinguishingTerms` in the hierarchy (e.g. E11.621 → `foot ulcer`, E11.65 → `hyperglycemia`, N18.30 → `stage 3`), and the **cited span itself must mention one of them**, or the code is dropped with the reason `span_lacks_specificity`. Coding E11.621 while citing only "type 2 diabetes mellitus" now fails, even though that phrase is genuinely in the note.
+**Chosen.** Grounding now verifies a span in **two layers** (`coding/grounding.ts`): (1) **existence**: the quoted words really occur in the note, matched at **word boundaries** so a generic 4-letter span can no longer match by accident inside a longer word; and (2) **specificity**: a code that is more specific than its parent carries `distinguishingTerms` in the hierarchy (e.g. E11.621 → `foot ulcer`, E11.65 → `hyperglycemia`, N18.30 → `stage 3`), and the **cited span itself must mention one of them**, or the code is dropped with the reason `span_lacks_specificity`. Coding E11.621 while citing only "type 2 diabetes mellitus" now fails, even though that phrase is genuinely in the note.
 
-**Rejected.** (a) The earlier **existence-only** grounding: it verified the span was *present*, which is purely anti-hallucination — a model could upcode E11.9 → E11.621 by citing the note's generic diabetes phrase and sail through, so I had to strip the "anti-upcoding" claim from grounding and lean entirely on the separate hierarchy metric. (b) The lenient normalized-**substring** match (`includes`, `MIN_SPAN_LEN=4`): it matched "pain" inside "explains"/"painless", so a short generic span could ground a code by coincidence. (c) **Downgrading** an over-specific code to its grounded parent instead of dropping it — rejected as too clever: silently rewriting the model's code set hides the error; dropping it surfaces as an honest miss (a *safe* failure) rather than a fabricated correction.
+**Rejected.** (a) The earlier **existence-only** grounding: it verified the span was *present*, which is purely anti-hallucination: a model could upcode E11.9 → E11.621 by citing the note's generic diabetes phrase and sail through, so I had to strip the "anti-upcoding" claim from grounding and lean entirely on the separate hierarchy metric. (b) The lenient normalized-**substring** match (`includes`, `MIN_SPAN_LEN=4`): it matched "pain" inside "explains"/"painless", so a short generic span could ground a code by coincidence. (c) **Downgrading** an over-specific code to its grounded parent instead of dropping it, rejected as too clever: silently rewriting the model's code set hides the error; dropping it surfaces as an honest miss (a *safe* failure) rather than a fabricated correction.
 
-**Why.** "Grounding reduces upcoding" is only TRUE if a generic span cannot buy specificity. Existence alone could not tell an honest specific quote from an unsupported climb dressed in the parent's words — exactly the gap decision 4's hierarchy metric was left to cover alone. Making the distinguishing term a **structural precondition of the citation** closes it on the build side: the upcode is dropped before scoring, for the same reason a hallucinated code is (its justification is not in the quote the model chose).
+**Why.** "Grounding reduces upcoding" is only TRUE if a generic span cannot buy specificity. Existence alone could not tell an honest specific quote from an unsupported climb dressed in the parent's words, exactly the gap decision 4's hierarchy metric was left to cover alone. Making the distinguishing term a **structural precondition of the citation** closes it on the build side: the upcode is dropped before scoring, for the same reason a hallucinated code is (its justification is not in the quote the model chose).
 
-**Honest limit.** This proves the distinguishing **term** appears in the cited span, not that the surrounding text *clinically* supports the code (a span could name "ulcer" in a negated or historical context). It is lexical specificity grounding, not clinical adjudication — a real coder still owns that judgment. The distinguishing-term lists are an illustrative teaching model over the public subset, not an exhaustive ICD-10 index.
+**Honest limit.** This proves the distinguishing **term** appears in the cited span, not that the surrounding text *clinically* supports the code (a span could name "ulcer" in a negated or historical context). It is lexical specificity grounding, not clinical adjudication; a real coder still owns that judgment. The distinguishing-term lists are an illustrative teaching model over the public subset, not an exhaustive ICD-10 index.
 
 ## 7. Security/compliance-weighted score, rates as fired / applicable
 
@@ -82,7 +82,7 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 ## 9. De-identification is a PIPELINE STAGE detecting identifier SHAPES (Phase 3)
 
-**Chosen.** `pipeline/deid.ts` cleans the note *before* it reaches the agent and re-scans the agent's output *after*, so an identifier can neither reach the model nor slip out. It detects identifier **shapes** structurally — **11 families** (name, MRN, SSN, date, phone, email, URL, IP, address, account number, age > 89) — with a light, dependency-free name heuristic (two title-cased tokens, a stopword skiplist for clinical bigrams, and title-introduced surnames). No ML model, no network, no heavy NER.
+**Chosen.** `pipeline/deid.ts` cleans the note *before* it reaches the agent and re-scans the agent's output *after*, so an identifier can neither reach the model nor slip out. It detects identifier **shapes** structurally, across **11 families** (name, MRN, SSN, date, phone, email, URL, IP, address, account number, age > 89), with a light, dependency-free name heuristic (two title-cased tokens, a stopword skiplist for clinical bigrams, and title-introduced surnames). No ML model, no network, no heavy NER.
 
 **Rejected:** relying on the eval-time value-aware probe alone (decision 3); and pulling in a heavy NER dependency.
 
@@ -96,9 +96,9 @@ Each entry: what I chose, what I rejected, why. The last section is what this ha
 
 **Rejected:** a stateful dashboard, or per-run pass/fail thresholds with no baseline (which fire on the first bad run without evidence of *change*).
 
-**Why.** Monitoring is the third leg of build → evaluate → **monitor**. The failures that matter in production are *regressions* — the code mix collapsing onto severe codes, upcoding creeping up — so the detectors compare a run against its own history, not an absolute bar. TVD is the right coarse "did the mix move" statistic: symmetric, bounded 0..1, no smoothing needed.
+**Why.** Monitoring is the third leg of build → evaluate → **monitor**. The failures that matter in production are *regressions* (the code mix collapsing onto severe codes, upcoding creeping up), so the detectors compare a run against its own history, not an absolute bar. TVD is the right coarse "did the mix move" statistic: symmetric, bounded 0..1, no smoothing needed.
 
-**Honest limit — the calibration signal is a proxy.** There is no independent model-reported confidence in this harness, so "calibration" compares the harness's own weighted **reliability score** against the realized **pass rate** and flags when the score materially *overstates* the pass rate (over-confidence). That is a genuine decoupling signal, but it is not true probability calibration (no per-prediction confidence, no reliability diagram). It is labelled as coarse in the code and the alert text. What monitoring here does **not** catch: a *slow* drift that never crosses a single-step threshold, and any regression on an axis the scorecard does not already measure.
+**Honest limit: the calibration signal is a proxy.** There is no independent model-reported confidence in this harness, so "calibration" compares the harness's own weighted **reliability score** against the realized **pass rate** and flags when the score materially *overstates* the pass rate (over-confidence). That is a genuine decoupling signal, but it is not true probability calibration (no per-prediction confidence, no reliability diagram). It is labelled as coarse in the code and the alert text. What monitoring here does **not** catch: a *slow* drift that never crosses a single-step threshold, and any regression on an axis the scorecard does not already measure.
 
 ---
 
