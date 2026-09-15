@@ -1,4 +1,4 @@
-# MedCodeEval
+# med-code-eval
 
 **A grounded medical-coding agent AND the reliability / upcoding / PHI-safety harness that proves it doesn't inflate or leak.**
 
